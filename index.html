@@ -6,6 +6,9 @@
     <title>GroupMela - Free WhatsApp Group Directory</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -19,6 +22,7 @@
                     <a href="index.html" class="active">Home</a>
                     <a href="#categories">Categories</a>
                     <a href="#submit">Submit Group</a>
+                    <a href="admin/index.html" target="_blank"><i class="fas fa-shield-alt"></i> Admin</a>
                 </div>
                 <button class="mobile-menu"><i class="fas fa-bars"></i></button>
             </div>
@@ -54,7 +58,7 @@
             </div>
             
             <div class="groups-grid" id="featuredGroups">
-                <!-- Groups will be loaded by JavaScript -->
+                <div class="loading">Loading featured groups...</div>
             </div>
         </section>
 
@@ -66,7 +70,7 @@
             </div>
             
             <div class="groups-grid" id="latestGroups">
-                <!-- Groups will be loaded by JavaScript -->
+                <div class="loading">Loading latest groups...</div>
             </div>
         </section>
 
@@ -74,7 +78,7 @@
         <section id="categories" class="categories-section">
             <h2><i class="fas fa-th-large"></i> Browse by Categories</h2>
             <div class="categories-grid" id="categoriesGrid">
-                <!-- Categories will be loaded by JavaScript -->
+                <div class="loading">Loading categories...</div>
             </div>
         </section>
 
@@ -119,6 +123,11 @@
                         <textarea id="description" rows="3" placeholder="What is this group about?"></textarea>
                     </div>
                     
+                    <div class="form-group">
+                        <label for="submitter_email">Your Email (Optional)</label>
+                        <input type="email" id="submitter_email" placeholder="For verification if needed">
+                    </div>
+                    
                     <div class="form-group checkbox">
                         <label>
                             <input type="checkbox" id="terms" required> 
@@ -126,7 +135,7 @@
                         </label>
                     </div>
                     
-                    <button type="submit" class="btn-submit">
+                    <button type="submit" class="btn-submit" id="submitBtn">
                         <i class="fas fa-paper-plane"></i> Submit Group
                     </button>
                 </form>
@@ -171,6 +180,9 @@
         </div>
     </footer>
 
+    <!-- Firebase Config -->
+    <script src="firebase-config.js"></script>
+    <!-- Main Script -->
     <script src="script.js"></script>
 </body>
 </html>
