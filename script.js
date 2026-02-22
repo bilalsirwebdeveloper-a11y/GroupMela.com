@@ -93,82 +93,219 @@ const groups = [
     }
 ];
 
-// Local Storage for submitted groups
-let submittedGroups = JSON.parse(localStorage.getItem('submittedGroups')) || [];
+// Global variables
+let categories = [];
+let allGroups = [];
 
-// Initialize Website
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Website loaded, connecting to Firebase...');
+    
+    // Load categories
     loadCategories();
+    
+    // Load featured groups
     loadFeaturedGroups();
+    
+    // Load latest groups
     loadLatestGroups();
-    loadCategoriesGrid();
-    loadFooterCategories();
-    setupMobileMenu();
+    
+    // Setup real-time updates
+    setupRealtimeUpdates();
 });
 
-// Load Categories in Pills
+// Load categories from Firebase
 function loadCategories() {
-    const pillsContainer = document.getElementById('categoryPills');
-    pillsContainer.innerHTML = '';
+    database.ref('categories').on('value', (snapshot) => {
+        categories = [];
+        snapshot.forEach((childSnapshot) => {
+            categories.push({
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            });
+        });
+        
+        // Update UI
+        displayCategoryPills();
+        displayCategoriesGrid();
+        displayFooterCategories();
+        populateCategorySelect();
+        
+        console.log('Categories loaded:', categories.length);
+    });
+}
+
+// Display category pills (hero section)
+function displayCategoryPills() {
+    const container = document.getElementById('categoryPills');
+    if (!container) return;
+    
+    container.innerHTML = '';
     
     categories.slice(0, 8).forEach(cat => {
         const pill = document.createElement('button');
         pill.className = 'pill';
-        pill.innerHTML = `${cat.icon} ${cat.name}`;
+        pill.innerHTML = `${cat.icon || '📌'} ${cat.name}`;
         pill.onclick = () => filterByCategory(cat.id);
-        pillsContainer.appendChild(pill);
+        container.appendChild(pill);
     });
 }
 
-// Load Featured Groups
+// Display categories grid
+function displayCategoriesGrid() {
+    const container = document.getElementById('categoriesGrid');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    categories.forEach(cat => {
+        // Get count of approved groups in this category
+        const count = allGroups.filter(g => g.categoryId === cat.id && g.status === 'approved').length;
+        
+        const card = document.createElement('button');
+        card.className = 'category-card';
+        card.onclick = () => filterByCategory(cat.id);
+        card.innerHTML = `
+            <div class="category-icon">${cat.icon || '📌'}</div>
+            <h3>${cat.name}</h3>
+            <p>${count} Groups</p>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// Display footer categories
+function displayFooterCategories() {
+    const container = document.getElementById('footerCategories');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    categories.slice(0, 5).forEach(cat => {
+        const li = document.createElement('li');
+        li.innerHTML = `<a href="#" onclick="filterByCategory('${cat.id}')">${cat.name}</a>`;
+        container.appendChild(li);
+    });
+}
+
+// Populate category select in submit form
+function populateCategorySelect() {
+    const select = document.getElementById('category');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Select Category</option>';
+    
+    categories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.id;
+        option.textContent = `${cat.icon || '📌'} ${cat.name}`;
+        select.appendChild(option);
+    });
+}
+
+// Load featured groups
 function loadFeaturedGroups() {
+    database.ref('groups').orderByChild('featured').equalTo(true).limitToFirst(4).on('value', (snapshot) => {
+        const featuredGroups = [];
+        snapshot.forEach((childSnapshot) => {
+            featuredGroups.push({
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            });
+        });
+        
+        displayFeaturedGroups(featuredGroups);
+    });
+}
+
+// Display featured groups
+function displayFeaturedGroups(groups) {
     const container = document.getElementById('featuredGroups');
+    if (!container) return;
+    
+    if (groups.length === 0) {
+        container.innerHTML = '<div class="no-groups">No featured groups yet</div>';
+        return;
+    }
+    
     container.innerHTML = '';
     
-    const featured = groups.filter(g => g.featured).slice(0, 3);
-    
-    featured.forEach(group => {
-        container.appendChild(createGroupCard(group));
+    groups.forEach(group => {
+        if (group.status !== 'approved') return;
+        
+        const card = createGroupCard(group);
+        container.appendChild(card);
     });
 }
 
-// Load Latest Groups
+// Load latest groups
 function loadLatestGroups() {
-    const container = document.getElementById('latestGroups');
-    container.innerHTML = '';
-    
-    // Combine original groups with submitted groups
-    const allGroups = [...groups, ...submittedGroups];
-    const latest = allGroups.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
-    
-    latest.forEach(group => {
-        container.appendChild(createGroupCard(group));
+    database.ref('groups').orderByChild('createdAt').limitToLast(8).on('value', (snapshot) => {
+        const latestGroups = [];
+        snapshot.forEach((childSnapshot) => {
+            latestGroups.push({
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            });
+        });
+        
+        // Reverse to show newest first
+        latestGroups.reverse();
+        displayLatestGroups(latestGroups);
+        
+        // Update allGroups for category counts
+        allGroups = latestGroups;
     });
 }
 
-// Create Group Card HTML
+// Display latest groups
+function displayLatestGroups(groups) {
+    const container = document.getElementById('latestGroups');
+    if (!container) return;
+    
+    const approvedGroups = groups.filter(g => g.status === 'approved').slice(0, 6);
+    
+    if (approvedGroups.length === 0) {
+        container.innerHTML = '<div class="no-groups">No groups yet. Be the first to submit!</div>';
+        return;
+    }
+    
+    container.innerHTML = '';
+    
+    approvedGroups.forEach(group => {
+        const card = createGroupCard(group);
+        container.appendChild(card);
+    });
+}
+
+// Create group card HTML
 function createGroupCard(group) {
     const card = document.createElement('div');
     card.className = 'group-card';
     
-    const date = new Date(group.date);
+    // Get category icon
+    const category = categories.find(c => c.id === group.categoryId);
+    const categoryIcon = category ? category.icon : '📌';
+    
+    // Format date
+    const date = group.createdAt ? new Date(group.createdAt) : new Date();
     const timeAgo = getTimeAgo(date);
     
     card.innerHTML = `
         <div class="card-header">
-            <span class="category-badge">${getCategoryIcon(group.categoryId)} ${group.category}</span>
+            <span class="category-badge">${categoryIcon} ${group.category || 'General'}</span>
             ${group.featured ? '<span class="featured-badge"><i class="fas fa-crown"></i> Featured</span>' : ''}
         </div>
         <h3>${group.name}</h3>
-        <p class="group-desc">${group.description.substring(0, 80)}${group.description.length > 80 ? '...' : ''}</p>
+        <p class="group-desc">${(group.description || 'No description').substring(0, 80)}${group.description && group.description.length > 80 ? '...' : ''}</p>
         <div class="group-meta">
-            <span><i class="fas fa-users"></i> ${group.members}+</span>
-            <span><i class="fas fa-eye"></i> ${group.views}</span>
+            <span><i class="fas fa-users"></i> ${group.members || 0}+</span>
+            <span><i class="fas fa-eye"></i> ${group.views || 0}</span>
             <span><i class="fas fa-clock"></i> ${timeAgo}</span>
         </div>
         <div class="card-actions">
-            <button class="btn-view" onclick="viewGroup(${group.id})">View Details</button>
-            <a href="${group.link}" target="_blank" class="btn-join" onclick="trackClick(${group.id})">
+            <button class="btn-view" onclick="viewGroup('${group.id}')">View Details</button>
+            <a href="${group.link}" target="_blank" class="btn-join" onclick="incrementViews('${group.id}')">
                 <i class="fab fa-whatsapp"></i> Join
             </a>
         </div>
@@ -177,127 +314,67 @@ function createGroupCard(group) {
     return card;
 }
 
-// Get Category Icon
-function getCategoryIcon(categoryId) {
-    const cat = categories.find(c => c.id === categoryId);
-    return cat ? cat.icon : '📌';
-}
-
-// Load Categories Grid
-function loadCategoriesGrid() {
-    const container = document.getElementById('categoriesGrid');
-    container.innerHTML = '';
-    
-    categories.forEach(cat => {
-        const card = document.createElement('button');
-        card.className = 'category-card';
-        card.onclick = () => filterByCategory(cat.id);
-        card.innerHTML = `
-            <div class="category-icon">${cat.icon}</div>
-            <h3>${cat.name}</h3>
-            <p>${cat.count} Groups</p>
-        `;
-        container.appendChild(card);
-    });
-}
-
-// Load Footer Categories
-function loadFooterCategories() {
-    const container = document.getElementById('footerCategories');
-    container.innerHTML = '';
-    
-    categories.slice(0, 5).forEach(cat => {
-        const li = document.createElement('li');
-        li.innerHTML = `<a href="#" onclick="filterByCategory(${cat.id})">${cat.name}</a>`;
-        container.appendChild(li);
-    });
-}
-
-// Filter by Category
-function filterByCategory(categoryId) {
-    const cat = categories.find(c => c.id === categoryId);
-    alert(`Showing all ${cat.name} groups! (This would filter in real implementation)`);
-    // In real implementation, you would redirect to category page or filter current view
-}
-
-// Search Groups
-function searchGroups() {
-    const query = document.getElementById('searchInput').value.toLowerCase();
-    if (query.trim() === '') {
-        alert('Please enter a search term');
-        return;
-    }
-    
-    const allGroups = [...groups, ...submittedGroups];
-    const results = allGroups.filter(g => 
-        g.name.toLowerCase().includes(query) || 
-        g.description.toLowerCase().includes(query) ||
-        g.category.toLowerCase().includes(query)
-    );
-    
-    if (results.length > 0) {
-        alert(`Found ${results.length} groups matching "${query}"`);
-        // In real implementation, you would show search results page
-    } else {
-        alert(`No groups found matching "${query}"`);
-    }
-}
-
-// Submit Group Form
+// Submit new group
 function submitGroup(event) {
     event.preventDefault();
     
-    const groupName = document.getElementById('group_name').value;
-    const link = document.getElementById('whatsapp_link').value;
-    const categoryId = parseInt(document.getElementById('category').value);
-    const language = document.getElementById('language').value;
-    const description = document.getElementById('description').value;
-    const terms = document.getElementById('terms').checked;
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
     
-    // Validate WhatsApp link
-    if (!link.includes('chat.whatsapp.com')) {
-        showFormMessage('Please enter a valid WhatsApp group link', 'error');
-        return;
-    }
-    
-    if (!terms) {
-        showFormMessage('Please agree to the terms', 'error');
-        return;
-    }
-    
-    // Get category name
+    const categoryId = document.getElementById('category').value;
     const category = categories.find(c => c.id === categoryId);
     
-    // Create new group object
-    const newGroup = {
-        id: groups.length + submittedGroups.length + 1,
-        name: groupName,
-        category: category.name,
+    if (!category) {
+        showFormMessage('Please select a category', 'error');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Group';
+        return;
+    }
+    
+    const groupData = {
+        name: document.getElementById('group_name').value,
+        link: document.getElementById('whatsapp_link').value,
         categoryId: categoryId,
-        description: description || 'No description provided',
+        category: category.name,
+        language: document.getElementById('language').value,
+        description: document.getElementById('description').value || '',
         members: 0,
         views: 0,
-        link: link,
         featured: false,
-        language: language,
-        date: new Date().toISOString().split('T')[0]
+        status: 'pending',
+        submittedBy: 'user',
+        submitterEmail: document.getElementById('submitter_email').value || 'anonymous',
+        createdAt: new Date().toISOString()
     };
     
-    // Save to localStorage
-    submittedGroups.push(newGroup);
-    localStorage.setItem('submittedGroups', JSON.stringify(submittedGroups));
+    // Validate WhatsApp link
+    if (!groupData.link.includes('chat.whatsapp.com')) {
+        showFormMessage('Please enter a valid WhatsApp group link', 'error');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Group';
+        return;
+    }
     
-    // Show success message
-    showFormMessage('Group submitted successfully! It will appear after admin approval.', 'success');
+    // Save to Firebase
+    const newGroupRef = database.ref('groups').push();
+    groupData.id = newGroupRef.key;
     
-    // Reset form
-    document.getElementById('groupForm').reset();
-    
-    // Reload latest groups
-    loadLatestGroups();
+    newGroupRef.set(groupData)
+        .then(() => {
+            showFormMessage('Group submitted successfully! It will appear after admin approval.', 'success');
+            document.getElementById('groupForm').reset();
+        })
+        .catch((error) => {
+            showFormMessage('Error: ' + error.message, 'error');
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Group';
+        });
 }
 
-// Show Form Message
+// Show form message
 function showFormMessage(message, type) {
     const msgDiv = document.getElementById('formMessage');
     msgDiv.style.display = 'block';
@@ -309,21 +386,61 @@ function showFormMessage(message, type) {
     }, 5000);
 }
 
-// Track Click
-function trackClick(groupId) {
-    console.log(`Group ${groupId} clicked - track for analytics`);
-    // In real implementation, you would send analytics data
+// Increment views when someone clicks join
+function incrementViews(groupId) {
+    const groupRef = database.ref('groups/' + groupId);
+    groupRef.transaction((group) => {
+        if (group) {
+            group.views = (group.views || 0) + 1;
+        }
+        return group;
+    });
 }
 
-// View Group Details
+// View group details
 function viewGroup(groupId) {
-    const allGroups = [...groups, ...submittedGroups];
-    const group = allGroups.find(g => g.id === groupId);
-    alert(`Group: ${group.name}\nLink: ${group.link}\nMembers: ${group.members}+`);
-    // In real implementation, you would open group detail page
+    database.ref('groups/' + groupId).once('value', (snapshot) => {
+        const group = snapshot.val();
+        if (group) {
+            // Show modal with group details
+            alert(`Group: ${group.name}\nCategory: ${group.category}\nMembers: ${group.members || 0}\n\nDescription: ${group.description || 'No description'}`);
+        }
+    });
 }
 
-// Get Time Ago
+// Filter by category
+function filterByCategory(categoryId) {
+    const category = categories.find(c => c.id === categoryId);
+    if (category) {
+        alert(`Showing all ${category.name} groups! (This would open category page in full version)`);
+        // In full version, redirect to category page
+        // window.location.href = `category.html?id=${categoryId}`;
+    }
+}
+
+// Search groups
+function searchGroups() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    if (!query) {
+        alert('Please enter a search term');
+        return;
+    }
+    
+    database.ref('groups').orderByChild('status').equalTo('approved').once('value', (snapshot) => {
+        const results = [];
+        snapshot.forEach((childSnapshot) => {
+            const group = childSnapshot.val();
+            if (group.name.toLowerCase().includes(query) || 
+                (group.description && group.description.toLowerCase().includes(query))) {
+                results.push(group);
+            }
+        });
+        
+        alert(`Found ${results.length} groups matching "${query}"`);
+    });
+}
+
+// Get time ago string
 function getTimeAgo(date) {
     const now = new Date();
     const diffMs = now - date;
@@ -331,72 +448,40 @@ function getTimeAgo(date) {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
     
-    if (diffMins < 60) return `${diffMins} mins ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
     return date.toLocaleDateString();
 }
 
-// Load Categories in Submit Form
-function loadCategoryOptions() {
-    const select = document.getElementById('category');
-    if (select) {
-        categories.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat.id;
-            option.textContent = `${cat.icon} ${cat.name}`;
-            select.appendChild(option);
-        });
-    }
+// Setup real-time updates
+function setupRealtimeUpdates() {
+    // Listen for new groups
+    database.ref('groups').on('child_added', (snapshot) => {
+        const newGroup = snapshot.val();
+        if (newGroup.status === 'approved') {
+            // Refresh latest groups
+            loadLatestGroups();
+        }
+    });
 }
 
-// Setup Mobile Menu
-function setupMobileMenu() {
-    const menuBtn = document.querySelector('.mobile-menu');
+// Mobile menu toggle
+document.querySelector('.mobile-menu')?.addEventListener('click', function() {
     const navLinks = document.querySelector('.nav-links');
-    
-    if (menuBtn) {
-        menuBtn.addEventListener('click', () => {
-            navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
-            navLinks.style.flexDirection = 'column';
-            navLinks.style.position = 'absolute';
-            navLinks.style.top = '70px';
-            navLinks.style.left = '0';
-            navLinks.style.width = '100%';
-            navLinks.style.background = 'white';
-            navLinks.style.padding = '20px';
-            navLinks.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-        });
+    if (navLinks.style.display === 'flex') {
+        navLinks.style.display = 'none';
+    } else {
+        navLinks.style.display = 'flex';
+        navLinks.style.flexDirection = 'column';
+        navLinks.style.position = 'absolute';
+        navLinks.style.top = '70px';
+        navLinks.style.left = '0';
+        navLinks.style.width = '100%';
+        navLinks.style.background = 'white';
+        navLinks.style.padding = '20px';
+        navLinks.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+        navLinks.style.zIndex = '1000';
     }
-}
-
-// Initialize category options when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    loadCategoryOptions();
 });
-
-// For category page functionality (if you create separate category.html)
-function getQueryParam(param) {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(param);
-}
-
-// If on category page, load category groups
-if (window.location.pathname.includes('category.html')) {
-    const catId = getQueryParam('id');
-    if (catId) {
-        loadCategoryGroups(parseInt(catId));
-    }
-}
-
-function loadCategoryGroups(categoryId) {
-    const category = categories.find(c => c.id === categoryId);
-    if (category) {
-        document.getElementById('categoryTitle').textContent = `${category.icon} ${category.name} Groups`;
-        
-        const allGroups = [...groups, ...submittedGroups];
-        const catGroups = allGroups.filter(g => g.categoryId === categoryId);
-        
-        // Display groups...
-    }
-}
