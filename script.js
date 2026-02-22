@@ -1,98 +1,3 @@
-// Sample Data (In real website, this would come from backend)
-const categories = [
-    { id: 1, name: 'Study Group', icon: '📚', count: 45 },
-    { id: 2, name: 'Business', icon: '💼', count: 38 },
-    { id: 3, name: 'Cricket', icon: '🏏', count: 27 },
-    { id: 4, name: 'Technology', icon: '💻', count: 52 },
-    { id: 5, name: 'Entertainment', icon: '🎬', count: 63 },
-    { id: 6, name: 'Jobs Alert', icon: '🔔', count: 41 },
-    { id: 7, name: 'Local Groups', icon: '📍', count: 34 },
-    { id: 8, name: 'Health & Fitness', icon: '💪', count: 19 },
-    { id: 9, name: 'Cooking', icon: '🍳', count: 23 },
-    { id: 10, name: 'Travel', icon: '✈️', count: 17 }
-];
-
-const groups = [
-    {
-        id: 1,
-        name: 'UPSC 2026 Aspirants',
-        category: 'Study Group',
-        categoryId: 1,
-        description: 'Daily current affairs, notes sharing, and discussion for UPSC preparation',
-        members: 1250,
-        views: 5400,
-        link: 'https://chat.whatsapp.com/example1',
-        featured: true,
-        language: 'Hindi',
-        date: '2026-02-20'
-    },
-    {
-        id: 2,
-        name: 'Digital India Business',
-        category: 'Business',
-        categoryId: 2,
-        description: 'Business ideas, marketing tips, and networking',
-        members: 890,
-        views: 3200,
-        link: 'https://chat.whatsapp.com/example2',
-        featured: true,
-        language: 'Hinglish',
-        date: '2026-02-21'
-    },
-    {
-        id: 3,
-        name: 'IPL 2026 Fans',
-        category: 'Cricket',
-        categoryId: 3,
-        description: 'IPL updates, match discussions, fantasy league',
-        members: 2100,
-        views: 8900,
-        link: 'https://chat.whatsapp.com/example3',
-        featured: true,
-        language: 'Hindi',
-        date: '2026-02-21'
-    },
-    {
-        id: 4,
-        name: 'Web Developers India',
-        category: 'Technology',
-        categoryId: 4,
-        description: 'HTML, CSS, JavaScript, React - Learn and grow together',
-        members: 750,
-        views: 2800,
-        link: 'https://chat.whatsapp.com/example4',
-        featured: false,
-        language: 'English',
-        date: '2026-02-19'
-    },
-    {
-        id: 5,
-        name: 'Govt Job Alerts',
-        category: 'Jobs Alert',
-        categoryId: 6,
-        description: 'Sarkari naukri notifications, exam tips',
-        members: 3400,
-        views: 12500,
-        link: 'https://chat.whatsapp.com/example5',
-        featured: false,
-        language: 'Hindi',
-        date: '2026-02-20'
-    },
-    {
-        id: 6,
-        name: 'Mumbai Local Group',
-        category: 'Local Groups',
-        categoryId: 7,
-        description: 'Mumbai events, flatmates, local business',
-        members: 560,
-        views: 1900,
-        link: 'https://chat.whatsapp.com/example6',
-        featured: false,
-        language: 'Hindi',
-        date: '2026-02-18'
-    }
-];
-
 // Global variables
 let categories = [];
 let allGroups = [];
@@ -109,9 +14,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load latest groups
     loadLatestGroups();
-    
-    // Setup real-time updates
-    setupRealtimeUpdates();
 });
 
 // Load categories from Firebase
@@ -130,12 +32,10 @@ function loadCategories() {
         displayCategoriesGrid();
         displayFooterCategories();
         populateCategorySelect();
-        
-        console.log('Categories loaded:', categories.length);
     });
 }
 
-// Display category pills (hero section)
+// Display category pills
 function displayCategoryPills() {
     const container = document.getElementById('categoryPills');
     if (!container) return;
@@ -159,7 +59,6 @@ function displayCategoriesGrid() {
     container.innerHTML = '';
     
     categories.forEach(cat => {
-        // Get count of approved groups in this category
         const count = allGroups.filter(g => g.categoryId === cat.id && g.status === 'approved').length;
         
         const card = document.createElement('button');
@@ -188,7 +87,7 @@ function displayFooterCategories() {
     });
 }
 
-// Populate category select in submit form
+// Populate category select
 function populateCategorySelect() {
     const select = document.getElementById('category');
     if (!select) return;
@@ -249,11 +148,8 @@ function loadLatestGroups() {
             });
         });
         
-        // Reverse to show newest first
         latestGroups.reverse();
         displayLatestGroups(latestGroups);
-        
-        // Update allGroups for category counts
         allGroups = latestGroups;
     });
 }
@@ -278,16 +174,14 @@ function displayLatestGroups(groups) {
     });
 }
 
-// Create group card HTML
+// Create group card
 function createGroupCard(group) {
     const card = document.createElement('div');
     card.className = 'group-card';
     
-    // Get category icon
     const category = categories.find(c => c.id === group.categoryId);
     const categoryIcon = category ? category.icon : '📌';
     
-    // Format date
     const date = group.createdAt ? new Date(group.createdAt) : new Date();
     const timeAgo = getTimeAgo(date);
     
@@ -314,7 +208,7 @@ function createGroupCard(group) {
     return card;
 }
 
-// Submit new group
+// Submit group
 function submitGroup(event) {
     event.preventDefault();
     
@@ -348,7 +242,6 @@ function submitGroup(event) {
         createdAt: new Date().toISOString()
     };
     
-    // Validate WhatsApp link
     if (!groupData.link.includes('chat.whatsapp.com')) {
         showFormMessage('Please enter a valid WhatsApp group link', 'error');
         submitBtn.disabled = false;
@@ -356,7 +249,6 @@ function submitGroup(event) {
         return;
     }
     
-    // Save to Firebase
     const newGroupRef = database.ref('groups').push();
     groupData.id = newGroupRef.key;
     
@@ -386,7 +278,7 @@ function showFormMessage(message, type) {
     }, 5000);
 }
 
-// Increment views when someone clicks join
+// Increment views
 function incrementViews(groupId) {
     const groupRef = database.ref('groups/' + groupId);
     groupRef.transaction((group) => {
@@ -402,7 +294,6 @@ function viewGroup(groupId) {
     database.ref('groups/' + groupId).once('value', (snapshot) => {
         const group = snapshot.val();
         if (group) {
-            // Show modal with group details
             alert(`Group: ${group.name}\nCategory: ${group.category}\nMembers: ${group.members || 0}\n\nDescription: ${group.description || 'No description'}`);
         }
     });
@@ -412,9 +303,7 @@ function viewGroup(groupId) {
 function filterByCategory(categoryId) {
     const category = categories.find(c => c.id === categoryId);
     if (category) {
-        alert(`Showing all ${category.name} groups! (This would open category page in full version)`);
-        // In full version, redirect to category page
-        // window.location.href = `category.html?id=${categoryId}`;
+        alert(`Showing all ${category.name} groups! (Category page coming soon)`);
     }
 }
 
@@ -440,7 +329,7 @@ function searchGroups() {
     });
 }
 
-// Get time ago string
+// Get time ago
 function getTimeAgo(date) {
     const now = new Date();
     const diffMs = now - date;
@@ -455,19 +344,7 @@ function getTimeAgo(date) {
     return date.toLocaleDateString();
 }
 
-// Setup real-time updates
-function setupRealtimeUpdates() {
-    // Listen for new groups
-    database.ref('groups').on('child_added', (snapshot) => {
-        const newGroup = snapshot.val();
-        if (newGroup.status === 'approved') {
-            // Refresh latest groups
-            loadLatestGroups();
-        }
-    });
-}
-
-// Mobile menu toggle
+// Mobile menu
 document.querySelector('.mobile-menu')?.addEventListener('click', function() {
     const navLinks = document.querySelector('.nav-links');
     if (navLinks.style.display === 'flex') {
