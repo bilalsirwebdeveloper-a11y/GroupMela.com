@@ -1,6 +1,7 @@
 // Global variables
 let categories = [];
-let allGroups = [];
+let allGroups = [];      // Saare groups store honge (approved + pending)
+let approvedGroups = [];  // Sirf approved groups
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -9,12 +10,39 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load categories
     loadCategories();
     
-    // Load featured groups
-    loadFeaturedGroups();
-    
-    // Load latest groups
-    loadLatestGroups();
+    // Load ALL groups (not just latest)
+    loadAllGroups();
 });
+
+// ============================================
+// LOAD ALL GROUPS FROM FIREBASE
+// ============================================
+function loadAllGroups() {
+    database.ref('groups').on('value', (snapshot) => {
+        allGroups = [];
+        snapshot.forEach((childSnapshot) => {
+            allGroups.push({
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            });
+        });
+        
+        console.log('Total groups loaded:', allGroups.length);
+        
+        // Filter approved groups
+        approvedGroups = allGroups.filter(g => g && g.status === 'approved');
+        console.log('Approved groups:', approvedGroups.length);
+        
+        // Update all sections
+        displayFeaturedGroups();
+        displayLatestGroups();
+        updateCategoryCounts();
+    });
+}
+
+// ============================================
+// CATEGORIES FUNCTIONS
+// ============================================
 
 // Load categories from Firebase
 function loadCategories() {
@@ -27,6 +55,8 @@ function loadCategories() {
             });
         });
         
+        console.log('Categories loaded:', categories.length);
+        
         // Update UI
         displayCategoryPills();
         displayCategoriesGrid();
@@ -35,7 +65,7 @@ function loadCategories() {
     });
 }
 
-// Display category pills
+// Display category pills (hero section)
 function displayCategoryPills() {
     const container = document.getElementById('categoryPills');
     if (!container) return;
@@ -59,7 +89,7 @@ function displayCategoriesGrid() {
     container.innerHTML = '';
     
     categories.forEach(cat => {
-        const count = allGroups.filter(g => g.categoryId === cat.id && g.status === 'approved').length;
+        const count = approvedGroups.filter(g => g && g.categoryId === cat.id).length;
         
         const card = document.createElement('button');
         card.className = 'category-card';
@@ -71,6 +101,11 @@ function displayCategoriesGrid() {
         `;
         container.appendChild(card);
     });
+}
+
+// Update category counts (called when groups change)
+function updateCategoryCounts() {
+    displayCategoriesGrid();
 }
 
 // Display footer categories
@@ -87,7 +122,7 @@ function displayFooterCategories() {
     });
 }
 
-// Populate category select
+// Populate category select in submit form
 function populateCategorySelect() {
     const select = document.getElementById('category');
     if (!select) return;
@@ -102,86 +137,71 @@ function populateCategorySelect() {
     });
 }
 
-// Load featured groups
-function loadFeaturedGroups() {
-    database.ref('groups').orderByChild('featured').equalTo(true).limitToFirst(4).on('value', (snapshot) => {
-        const featuredGroups = [];
-        snapshot.forEach((childSnapshot) => {
-            featuredGroups.push({
-                id: childSnapshot.key,
-                ...childSnapshot.val()
-            });
-        });
-        
-        displayFeaturedGroups(featuredGroups);
-    });
-}
+// ============================================
+// FEATURED GROUPS FUNCTIONS
+// ============================================
 
 // Display featured groups
-function displayFeaturedGroups(groups) {
+function displayFeaturedGroups() {
     const container = document.getElementById('featuredGroups');
     if (!container) return;
     
-    if (groups.length === 0) {
+    const featured = approvedGroups.filter(g => g && g.featured === true).slice(0, 4);
+    
+    if (featured.length === 0) {
         container.innerHTML = '<div class="no-groups">No featured groups yet</div>';
         return;
     }
     
     container.innerHTML = '';
     
-    groups.forEach(group => {
-        if (group.status !== 'approved') return;
-        
+    featured.forEach(group => {
         const card = createGroupCard(group);
         container.appendChild(card);
     });
 }
 
-// Load latest groups
-function loadLatestGroups() {
-    database.ref('groups').orderByChild('createdAt').limitToLast(8).on('value', (snapshot) => {
-        const latestGroups = [];
-        snapshot.forEach((childSnapshot) => {
-            latestGroups.push({
-                id: childSnapshot.key,
-                ...childSnapshot.val()
-            });
-        });
-        
-        latestGroups.reverse();
-        displayLatestGroups(latestGroups);
-        allGroups = latestGroups;
-    });
-}
+// ============================================
+// LATEST GROUPS FUNCTIONS
+// ============================================
 
 // Display latest groups
-function displayLatestGroups(groups) {
+function displayLatestGroups() {
     const container = document.getElementById('latestGroups');
     if (!container) return;
     
-    const approvedGroups = groups.filter(g => g.status === 'approved').slice(0, 6);
+    // Sort by date (newest first) and take first 6
+    const latest = [...approvedGroups]
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        .slice(0, 6);
     
-    if (approvedGroups.length === 0) {
+    if (latest.length === 0) {
         container.innerHTML = '<div class="no-groups">No groups yet. Be the first to submit!</div>';
         return;
     }
     
     container.innerHTML = '';
     
-    approvedGroups.forEach(group => {
+    latest.forEach(group => {
         const card = createGroupCard(group);
         container.appendChild(card);
     });
 }
 
-// Create group card
+// ============================================
+// GROUP CARD CREATION
+// ============================================
+
+// Create group card HTML
 function createGroupCard(group) {
     const card = document.createElement('div');
     card.className = 'group-card';
     
-    const category = categories.find(c => c.id === group.categoryId);
+    // Get category icon
+    const category = categories.find(c => c && c.id === group.categoryId);
     const categoryIcon = category ? category.icon : '📌';
     
+    // Format date
     const date = group.createdAt ? new Date(group.createdAt) : new Date();
     const timeAgo = getTimeAgo(date);
     
@@ -208,7 +228,11 @@ function createGroupCard(group) {
     return card;
 }
 
-// Submit group
+// ============================================
+// SUBMIT GROUP FORM
+// ============================================
+
+// Submit new group
 function submitGroup(event) {
     event.preventDefault();
     
@@ -217,7 +241,7 @@ function submitGroup(event) {
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
     
     const categoryId = document.getElementById('category').value;
-    const category = categories.find(c => c.id === categoryId);
+    const category = categories.find(c => c && c.id === categoryId);
     
     if (!category) {
         showFormMessage('Please select a category', 'error');
@@ -242,6 +266,7 @@ function submitGroup(event) {
         createdAt: new Date().toISOString()
     };
     
+    // Validate WhatsApp link
     if (!groupData.link.includes('chat.whatsapp.com')) {
         showFormMessage('Please enter a valid WhatsApp group link', 'error');
         submitBtn.disabled = false;
@@ -249,6 +274,7 @@ function submitGroup(event) {
         return;
     }
     
+    // Save to Firebase
     const newGroupRef = database.ref('groups').push();
     groupData.id = newGroupRef.key;
     
@@ -278,7 +304,11 @@ function showFormMessage(message, type) {
     }, 5000);
 }
 
-// Increment views
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+// Increment views when someone clicks join
 function incrementViews(groupId) {
     const groupRef = database.ref('groups/' + groupId);
     groupRef.transaction((group) => {
@@ -294,42 +324,43 @@ function viewGroup(groupId) {
     database.ref('groups/' + groupId).once('value', (snapshot) => {
         const group = snapshot.val();
         if (group) {
-            alert(`Group: ${group.name}\nCategory: ${group.category}\nMembers: ${group.members || 0}\n\nDescription: ${group.description || 'No description'}`);
+            alert(`📌 Group: ${group.name}\n📂 Category: ${group.category}\n👥 Members: ${group.members || 0}\n📝 Description: ${group.description || 'No description'}`);
         }
     });
 }
 
 // Filter by category
 function filterByCategory(categoryId) {
-    const category = categories.find(c => c.id === categoryId);
+    const category = categories.find(c => c && c.id === categoryId);
     if (category) {
-        alert(`Showing all ${category.name} groups! (Category page coming soon)`);
+        const count = approvedGroups.filter(g => g && g.categoryId === categoryId).length;
+        alert(`📂 ${category.name} Category\n\nTotal groups: ${count}\n\n🔍 Full category page coming soon!`);
     }
 }
 
 // Search groups
 function searchGroups() {
-    const query = document.getElementById('searchInput').value.toLowerCase();
+    const query = document.getElementById('searchInput').value.toLowerCase().trim();
     if (!query) {
         alert('Please enter a search term');
         return;
     }
     
-    database.ref('groups').orderByChild('status').equalTo('approved').once('value', (snapshot) => {
-        const results = [];
-        snapshot.forEach((childSnapshot) => {
-            const group = childSnapshot.val();
-            if (group.name.toLowerCase().includes(query) || 
-                (group.description && group.description.toLowerCase().includes(query))) {
-                results.push(group);
-            }
-        });
-        
-        alert(`Found ${results.length} groups matching "${query}"`);
-    });
+    const results = approvedGroups.filter(g => 
+        (g.name && g.name.toLowerCase().includes(query)) || 
+        (g.description && g.description.toLowerCase().includes(query))
+    );
+    
+    if (results.length > 0) {
+        alert(`✅ Found ${results.length} groups matching "${query}"\n\nFirst 5 results:\n${
+            results.slice(0, 5).map(g => `• ${g.name}`).join('\n')
+        }`);
+    } else {
+        alert(`❌ No groups found matching "${query}"`);
+    }
 }
 
-// Get time ago
+// Get time ago string
 function getTimeAgo(date) {
     const now = new Date();
     const diffMs = now - date;
@@ -344,7 +375,11 @@ function getTimeAgo(date) {
     return date.toLocaleDateString();
 }
 
-// Mobile menu
+// ============================================
+// MOBILE MENU
+// ============================================
+
+// Mobile menu toggle
 document.querySelector('.mobile-menu')?.addEventListener('click', function() {
     const navLinks = document.querySelector('.nav-links');
     if (navLinks.style.display === 'flex') {
