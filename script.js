@@ -1,7 +1,7 @@
 // Global variables
 let categories = [];
-let allGroups = [];      // Saare groups store honge (approved + pending)
-let approvedGroups = [];  // Sirf approved groups
+let allGroups = [];
+let approvedGroups = [];
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load categories
     loadCategories();
     
-    // Load ALL groups (not just latest)
+    // Load ALL groups
     loadAllGroups();
 });
 
@@ -103,7 +103,7 @@ function displayCategoriesGrid() {
     });
 }
 
-// Update category counts (called when groups change)
+// Update category counts
 function updateCategoryCounts() {
     displayCategoriesGrid();
 }
@@ -170,7 +170,6 @@ function displayLatestGroups() {
     const container = document.getElementById('latestGroups');
     if (!container) return;
     
-    // Sort by date (newest first) and take first 6
     const latest = [...approvedGroups]
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
         .slice(0, 6);
@@ -197,11 +196,9 @@ function createGroupCard(group) {
     const card = document.createElement('div');
     card.className = 'group-card';
     
-    // Get category icon
     const category = categories.find(c => c && c.id === group.categoryId);
     const categoryIcon = category ? category.icon : '📌';
     
-    // Format date
     const date = group.createdAt ? new Date(group.createdAt) : new Date();
     const timeAgo = getTimeAgo(date);
     
@@ -229,16 +226,14 @@ function createGroupCard(group) {
 }
 
 // ============================================
-// SUBMIT GROUP FORM
+// UPDATED SUBMIT GROUP FUNCTION - WITH VALIDATION
 // ============================================
-
-// Submit new group
 function submitGroup(event) {
     event.preventDefault();
     
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
     
     const categoryId = document.getElementById('category').value;
     const category = categories.find(c => c && c.id === categoryId);
@@ -252,7 +247,7 @@ function submitGroup(event) {
     
     const groupData = {
         name: document.getElementById('group_name').value,
-        link: document.getElementById('whatsapp_link').value,
+        link: document.getElementById('whatsapp_link').value.trim(),
         categoryId: categoryId,
         category: category.name,
         language: document.getElementById('language').value,
@@ -266,21 +261,83 @@ function submitGroup(event) {
         createdAt: new Date().toISOString()
     };
     
-    // Validate WhatsApp link
-    if (!groupData.link.includes('chat.whatsapp.com')) {
-        showFormMessage('Please enter a valid WhatsApp group link', 'error');
+    // STEP 1: CHECK IF IT'S A VALID WHATSAPP GROUP LINK
+    if (!isValidWhatsAppLink(groupData.link)) {
+        showFormMessage('❌ Please enter a valid WhatsApp group link (chat.whatsapp.com)', 'error');
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Group';
         return;
     }
     
-    // Save to Firebase
+    // STEP 2: CHECK FOR DUPLICATE LINKS
+    checkDuplicateLink(groupData.link, function(isDuplicate) {
+        if (isDuplicate) {
+            showFormMessage('❌ This WhatsApp group link has already been submitted!', 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Group';
+            return;
+        }
+        
+        // STEP 3: SAVE TO FIREBASE
+        saveGroupToFirebase(groupData, submitBtn);
+    });
+}
+
+// ============================================
+// CHECK IF LINK IS VALID WHATSAPP GROUP LINK
+// ============================================
+function isValidWhatsAppLink(link) {
+    if (!link.includes('chat.whatsapp.com') && !link.includes('wa.me')) {
+        return false;
+    }
+    
+    let inviteCode = '';
+    if (link.includes('chat.whatsapp.com')) {
+        inviteCode = link.split('chat.whatsapp.com/')[1];
+    } else if (link.includes('wa.me')) {
+        inviteCode = link.split('wa.me/')[1];
+    }
+    
+    if (inviteCode) {
+        inviteCode = inviteCode.split('?')[0].split('#')[0];
+    }
+    
+    return inviteCode && inviteCode.length >= 10;
+}
+
+// ============================================
+// CHECK FOR DUPLICATE LINKS
+// ============================================
+function checkDuplicateLink(link, callback) {
+    const normalizedLink = link.replace(/\/$/, '').split('?')[0].split('#')[0];
+    
+    database.ref('groups').once('value', (snapshot) => {
+        let isDuplicate = false;
+        
+        snapshot.forEach((childSnapshot) => {
+            const existingLink = childSnapshot.val().link;
+            const normalizedExisting = existingLink.replace(/\/$/, '').split('?')[0].split('#')[0];
+            
+            if (normalizedExisting === normalizedLink) {
+                isDuplicate = true;
+                return true;
+            }
+        });
+        
+        callback(isDuplicate);
+    });
+}
+
+// ============================================
+// SAVE GROUP TO FIREBASE
+// ============================================
+function saveGroupToFirebase(groupData, submitBtn) {
     const newGroupRef = database.ref('groups').push();
     groupData.id = newGroupRef.key;
     
     newGroupRef.set(groupData)
         .then(() => {
-            showFormMessage('Group submitted successfully! It will appear after admin approval.', 'success');
+            showFormMessage('✅ Group submitted successfully! It will appear after admin approval.', 'success');
             document.getElementById('groupForm').reset();
         })
         .catch((error) => {
@@ -308,7 +365,7 @@ function showFormMessage(message, type) {
 // UTILITY FUNCTIONS
 // ============================================
 
-// Increment views when someone clicks join
+// Increment views
 function incrementViews(groupId) {
     const groupRef = database.ref('groups/' + groupId);
     groupRef.transaction((group) => {
@@ -379,7 +436,6 @@ function getTimeAgo(date) {
 // MOBILE MENU
 // ============================================
 
-// Mobile menu toggle
 document.querySelector('.mobile-menu')?.addEventListener('click', function() {
     const navLinks = document.querySelector('.nav-links');
     if (navLinks.style.display === 'flex') {
